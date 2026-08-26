@@ -1,0 +1,15 @@
+# The three engines are cloned in as read-only dependencies, not vendored.
+# They are separate repositories with their own history; committing their
+# contents here would fork them, and the whole discipline of this project is
+# that they stay unmodified and upstream. The README says how to clone them.
+raft-engine/
+hnsw-engine/
+training-engine/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.DS_Store

@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mlplat — cluster dashboard</title>
+<style>
+:root{
+  --page:#0a0b0d; --panel:#111317; --raised:#171a1f; --line:#20242a; --line-2:#2c323a;
+  --ink:#f4f6f8; --ink-2:#9aa4ae; --label:#828b95;
+  --accent:#a78bfa; --ok:#4ade80; --warn:#fbbf24; --fault:#f43f5e;
+  --sans:"Space Grotesk",ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1rem,3vw,2rem)}
+h1,h2,h3{margin:0;line-height:1.2;letter-spacing:-.02em}
+code,.mono{font-family:var(--mono)}
+
+header{padding:2rem 0 1.25rem;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--mono);font-size:.58rem;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 .7rem}
+h1{font-size:clamp(1.5rem,3vw,2.1rem)}
+.mode{display:inline-flex;align-items:center;gap:.45rem;font-family:var(--mono);
+  font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;padding:.25rem .6rem;
+  border-radius:999px;border:1px solid var(--line-2);color:var(--label);margin-left:.75rem}
+.mode.live{color:var(--ok);border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.08)}
+.mode.replay{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
+.sub{color:var(--ink-2);margin:.9rem 0 0;max-width:68ch;font-size:.94rem}
+
+.bar{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:12px;overflow:hidden;margin:1.5rem 0}
+.stat{background:var(--panel);padding:.85rem 1rem;flex:1;min-width:0}
+.stat .v{font-family:var(--mono);font-size:1.15rem;font-weight:700;display:block;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .k{font-family:var(--mono);font-size:.52rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--label);display:block;margin-top:.3rem}
+.v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.fault{color:var(--fault)}
+.v.accent{color:var(--accent)}
+
+.grid{display:grid;gap:1rem;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+  margin-bottom:1rem}
+@media(max-width:64rem){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1.1rem}
+.card h3{font-size:.95rem;margin-bottom:.9rem}
+.card h3 .hint{font-family:var(--mono);font-size:.55rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--label);font-weight:400;margin-left:.6rem}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.72rem}
+th{text-align:left;font-size:.52rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--label);font-weight:400;padding:.4rem .5rem;border-bottom:1px solid var(--line-2)}
+td{padding:.4rem .5rem;border-bottom:1px solid var(--line);color:var(--ink-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right}
+.role-leader{color:var(--accent)} .role-dead{color:var(--fault)}
+.pgroup{color:var(--warn)}
+
+.pbar{height:5px;background:var(--raised);border-radius:3px;overflow:hidden;
+  min-width:90px;display:inline-block;vertical-align:middle}
+.pbar i{display:block;height:100%;background:var(--accent)}
+
+/* overflow-x lives here, not on the page: a long event line scrolls inside
+   the log rather than dragging the whole document sideways. */
+.log{font-family:var(--mono);font-size:.66rem;max-height:19rem;overflow-y:auto;
+  overflow-x:auto;display:flex;flex-direction:column-reverse}
+.ev{display:grid;grid-template-columns:3.4rem 1fr;gap:.6rem;padding:.24rem 0;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.ev .t{color:var(--label)}
+.ev .k{color:var(--ink-2)}
+.ev.violation .k{color:var(--fault)}
+.ev.fault .k{color:var(--warn)}
+.ev.good .k{color:var(--ok)}
+
+.controls{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:1rem}
+button{font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;
+  text-transform:uppercase;background:var(--raised);color:var(--ink-2);
+  border:1px solid var(--line-2);border-radius:7px;padding:.45rem .8rem;cursor:pointer}
+button:hover{color:var(--ink);border-color:var(--label)}
+button.danger:hover{color:var(--fault);border-color:var(--fault)}
+input[type=range]{flex:1;min-width:12rem;accent-color:var(--accent)}
+.scrub{font-family:var(--mono);font-size:.62rem;color:var(--label);
+  font-variant-numeric:tabular-nums;min-width:8rem}
+.err{color:var(--fault);font-family:var(--mono);font-size:.65rem;margin-top:.6rem}
+footer{padding:1.5rem 0 3rem;color:var(--label);font-family:var(--mono);font-size:.6rem}
+footer a{color:var(--label)}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <p class="eyebrow">ml-infra-platform</p>
+  <h1>Cluster dashboard<span class="mode" id="mode">connecting…</span></h1>
+  <p class="sub" id="blurb">
+    Training jobs on the left, a Raft-replicated HNSW vector store on the right,
+    and one event timeline covering both.
+  </p>
+</div></header>
+
+<div class="wrap">
+  <div class="bar" id="stats"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Storage cluster <span class="hint" id="cluster-hint"></span></h3>
+      <table><thead><tr>
+        <th>node</th><th>role</th><th class="n">term</th><th class="n">log</th>
+        <th class="n">commit</th><th class="n">applied</th><th class="n">vectors</th>
+      </tr></thead><tbody id="nodes"></tbody></table>
+      <div class="controls" id="cluster-controls"></div>
+    </div>
+
+    <div class="card">
+      <h3>Training jobs</h3>
+      <table><thead><tr>
+        <th>job</th><th>state</th><th>progress</th>
+        <th class="n">loss</th><th class="n">pub</th>
+      </tr></thead><tbody id="jobs"></tbody></table>
+      <div class="controls" id="job-controls"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Event timeline <span class="hint">both layers, one clock</span></h3>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card" id="replay-card" style="display:none;margin-top:1rem">
+    <h3>Replay <span class="hint" id="replay-hint"></span></h3>
+    <div class="controls">
+      <button id="play">play</button>
+      <input type="range" id="scrub" min="0" value="0">
+      <span class="scrub" id="scrub-label"></span>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+</div>
+
+<footer><div class="wrap">
+  <span id="foot"></span> &middot;
+  <a href="https://github.com/abho7/ml-infra-platform">source</a>
+</div></footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const GOOD = new Set(["leader_elected","write_committed","embeddings_published",
+                      "job_finished","partition_healed","replica_caught_up",
+                      "checkpoint_saved","cluster_started"]);
+const BAD  = new Set(["node_killed","worker_died","partition_started",
+                      "write_rejected","read_refused"]);
+
+let MODE = null;      // "live" | "replay"
+let REC = null;       // recording, in replay mode
+let frame = 0, playing = false, timer = null;
+
+/* ------------------------------------------------------------------ render */
+
+function renderStats(s, extra) {
+  const h = s.health;
+  const cls = {healthy:"ok", degraded:"warn", unavailable:"fault"}[h.status];
+  const cells = [
+    [h.status, "cluster health", cls],
+    [h.leader || "(none)", "leader", "accent"],
+    [`${h.live_nodes}/${h.total_nodes}`, "nodes live", h.live_nodes === h.total_nodes ? "ok" : "warn"],
+    [h.has_quorum ? "yes" : "NO", "quorum", h.has_quorum ? "ok" : "fault"],
+    [s.storage ? s.storage.acked_writes : "-", "acked writes", ""],
+    [s.tick, "tick", ""],
+  ];
+  if (extra) cells.push(extra);
+  $("stats").innerHTML = cells.map(([v,k,c]) =>
+    `<div class="stat"><span class="v ${c||''}">${esc(v)}</span>
+     <span class="k">${esc(k)}</span></div>`).join("");
+}
+
+function renderNodes(nodes, partition) {
+  const groupOf = n => {
+    if (!partition) return null;
+    const i = partition.findIndex(g => g.includes(n));
+    return i < 0 ? null : String.fromCharCode(65 + i);
+  };
+  $("nodes").innerHTML = Object.entries(nodes).map(([id, n]) => {
+    const role = n.alive ? n.role : "dead";
+    const cls = !n.alive ? "role-dead" : (n.role === "leader" ? "role-leader" : "");
+    const g = groupOf(id);
+    return `<tr><td>${esc(id)}${g ? ` <span class="pgroup">[${g}]</span>` : ""}</td>
+      <td class="${cls}">${esc(role)}</td><td class="n">${n.term}</td>
+      <td class="n">${n.log_len}</td><td class="n">${n.commit_index}</td>
+      <td class="n">${n.applied_index}</td><td class="n">${n.vectors}</td></tr>`;
+  }).join("");
+  $("cluster-hint").textContent = partition
+    ? `partitioned into ${partition.length} groups` : "";
+}
+
+function renderJobs(jobs) {
+  if (!jobs.length) {
+    $("jobs").innerHTML = `<tr><td colspan="5" style="color:var(--label)">no jobs</td></tr>`;
+    return;
+  }
+  $("jobs").innerHTML = jobs.map(j => {
+    const pct = Math.round(100 * j.step / Math.max(1, j.total_steps));
+    const loss = j.loss == null ? "-" : j.loss.toFixed(4);
+    const lost = j.workers_lost && j.workers_lost.length
+      ? ` <span class="pgroup">-${j.workers_lost.length}w</span>` : "";
+    return `<tr><td>${esc(j.job_id)}</td><td>${esc(j.state)}${lost}</td>
+      <td><span class="pbar"><i style="width:${pct}%"></i></span> ${j.step}/${j.total_steps}</td>
+      <td class="n">${loss}</td><td class="n">${j.published}</td></tr>`;
+  }).join("");
+}
+
+// A raw float renders as loss=0.21452702007146274, which is 19 characters of
+// which about 5 carry information. Untrimmed they made every row wide enough
+// to scroll the whole page sideways.
+function fmt(v) {
+  if (typeof v === "number") {
+    return Number.isInteger(v) ? String(v) : v.toFixed(4);
+  }
+  if (Array.isArray(v)) {
+    return v.length > 4 ? `[${v.length} items]` : JSON.stringify(v);
+  }
+  return JSON.stringify(v);
+}
+
+function renderEvents(events) {
+  $("log").innerHTML = events.slice(-120).map(e => {
+    const cls = e.kind === "violation" ? "violation"
+              : BAD.has(e.kind) ? "fault" : GOOD.has(e.kind) ? "good" : "";
+    const d = Object.entries(e.detail || {})
+      .map(([k, v]) => `${k}=${fmt(v)}`).join("  ");
+    return `<div class="ev ${cls}"><span class="t">t${e.tick}</span>
+      <span class="k">${esc(e.kind)} <span style="color:var(--label)">${esc(d)}</span></span></div>`;
+  }).join("");
+}
+
+/* -------------------------------------------------------------- live mode */
+
+async function jget(p){ const r = await fetch(p); return r.json(); }
+async function jpost(p, b){
+  const r = await fetch(p, {method:"POST", headers:{"Content-Type":"application/json"},
+                            body: JSON.stringify(b||{})});
+  return r.json();
+}
+
+function liveControls(state) {
+  const nodes = Object.entries(state.cluster.nodes);
+  $("cluster-controls").innerHTML =
+    nodes.map(([id, n]) =>
+      `<button class="${n.alive ? "danger" : ""}" data-node="${id}" data-alive="${n.alive}">
+        ${n.alive ? "kill" : "restart"} ${id}</button>`).join("") +
+    `<button id="do-part" class="danger">partition</button>
+     <button id="do-heal">heal</button>`;
+
+  $("cluster-controls").querySelectorAll("[data-node]").forEach(b => {
+    b.onclick = () => jpost(b.dataset.alive === "true"
+      ? "/api/nodes/kill" : "/api/nodes/restart", {node: b.dataset.node}).then(tickLive);
+  });
+  $("do-part").onclick = () => {
+    const ids = nodes.map(([i]) => i);
+    const cut = Math.max(1, Math.floor(ids.length / 2));
+    jpost("/api/partition", {groups: [ids.slice(0, cut), ids.slice(cut)]}).then(tickLive);
+  };
+  $("do-heal").onclick = () => jpost("/api/heal", {}).then(tickLive);
+
+  const jobs = state.jobs;
+  $("job-controls").innerHTML =
+    `<button id="do-submit">submit job</button>` +
+    (jobs.length ? `<button id="do-killw" class="danger">kill a worker</button>` : "");
+  $("do-submit").onclick = () => jpost("/api/jobs", {
+    job_id: "j" + (jobs.length + 1), steps: 80, n_classes: 8, publish_every: 10
+  }).then(tickLive);
+  if (jobs.length) $("do-killw").onclick = () => {
+    const j = jobs.find(x => x.state === "running") || jobs[0];
+    jpost("/api/workers/kill", {job: j.job_id, worker: ""}).then(tickLive);
+  };
+}
+
+async function tickLive() {
+  try {
+    const [state, ev] = await Promise.all([
+      jget("/api/state"), jget("/api/events?limit=120")
+    ]);
+    renderStats(state, [state.events, "events", ""]);
+    renderNodes(state.cluster.nodes, state.cluster.partition);
+    renderJobs(state.jobs);
+    renderEvents(ev.events);
+    liveControls(state);
+    $("foot").textContent = `live · uptime ${state.uptime_s}s · tick ${state.tick}`;
+    $("err").textContent = "";
+  } catch (e) {
+    $("err").textContent = "lost the control plane: " + e;
+  }
+}
+
+/* ------------------------------------------------------------ replay mode */
+
+function showFrame(i) {
+  frame = Math.max(0, Math.min(i, REC.frames.length - 1));
+  const f = REC.frames[frame];
+  renderStats({health: f.health, tick: f.tick, storage: f.storage},
+              [`${frame + 1}/${REC.frames.length}`, "frame", "accent"]);
+  renderNodes(f.nodes, f.partition);
+  renderJobs(f.jobs);
+  // Events up to and including this frame, so scrubbing back rewinds history
+  // rather than leaving later events on screen.
+  const upto = REC.frames.slice(0, frame + 1).flatMap(x => x.events);
+  renderEvents(upto);
+  $("scrub").value = frame;
+  $("scrub-label").textContent = `round ${f.round} · tick ${f.tick}`;
+}
+
+function initReplay(rec) {
+  REC = rec;
+  $("mode").textContent = "recorded replay";
+  $("mode").className = "mode replay";
+  $("blurb").textContent = rec.description;
+  $("replay-card").style.display = "";
+  $("replay-hint").textContent =
+    `${rec.frames.length} frames captured from a real run — not a simulation`;
+  $("cluster-controls").innerHTML =
+    `<span style="color:var(--label);font-family:var(--mono);font-size:.6rem">
+      controls are live-only; this is a recording</span>`;
+  $("scrub").max = rec.frames.length - 1;
+  $("scrub").oninput = e => { stop(); showFrame(+e.target.value); };
+  $("play").onclick = () => playing ? stop() : play();
+  $("foot").textContent =
+    `replay · ${rec.title} · ${rec.frames.length} frames`;
+  showFrame(0);
+  play();
+}
+
+function play() {
+  playing = true; $("play").textContent = "pause";
+  timer = setInterval(() => {
+    if (frame >= REC.frames.length - 1) { stop(); return; }
+    showFrame(frame + 1);
+  }, 220);
+}
+function stop() {
+  playing = false; $("play").textContent = "play";
+  if (timer) clearInterval(timer);
+}
+
+/* ------------------------------------------------------------------- boot */
+
+(async function boot() {
+  // A recording inlined by build_site.py means this is the deployed page.
+  // Otherwise try the control plane; the dashboard is served by it in live
+  // mode, so a reachable /api/state is the definition of "live".
+  const inlined = document.getElementById("recording");
+  if (inlined) {
+    initReplay(JSON.parse(inlined.textContent));
+    return;
+  }
+  try {
+    await jget("/api/state");
+    MODE = "live";
+    $("mode").textContent = "live";
+    $("mode").className = "mode live";
+    await tickLive();
+    setInterval(tickLive, 700);
+  } catch (e) {
+    $("mode").textContent = "no control plane";
+    $("mode").className = "mode";
+    $("err").textContent =
+      "No control plane reachable. Start one with:  python -m mlplat.control.cli serve";
+  }
+})();
+</script>
+</body>
+</html>
