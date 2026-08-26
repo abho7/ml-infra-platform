@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composing Three Systems</title>
+<meta name="description" content="A distributed ML platform built by composing a
+Raft engine, an HNSW vector index, and a distributed training framework, and the
+evidence that the composition is correct.">
+<style>
+:root{
+  --page:#0b0c0e; --panel:#121418; --raised:#171a20; --line:#22262c; --line-2:#2e343d;
+  --ink:#f2f4f7; --ink-2:#b3bcc6; --label:#8c95a0;
+  --accent:#a78bfa; --accent-dim:#6d5bb8;
+  --ok:#4ade80; --warn:#fbbf24; --fault:#f43f5e;
+  --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Consolas,"Liberation Mono",monospace;
+  --measure:68ch;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility}
+.wrap{max-width:74rem;margin:0 auto;padding:0 clamp(1.1rem,4vw,2.5rem)}
+.prose{max-width:var(--measure)}
+h1,h2,h3,h4{margin:0;line-height:1.18;letter-spacing:-.021em;font-weight:650;
+  text-wrap:balance}
+p{margin:0}
+a{color:var(--accent);text-decoration-color:var(--accent-dim);
+  text-underline-offset:3px}
+a:hover{text-decoration-color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em;background:var(--raised);
+  border:1px solid var(--line);border-radius:4px;padding:.06em .34em;color:var(--ink-2)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+/* ---- rhythm: sections space themselves, elements never carry margins ---- */
+section{padding:3.25rem 0;border-top:1px solid var(--line)}
+section > .wrap{display:flex;flex-direction:column;gap:1.5rem}
+.stack{display:flex;flex-direction:column;gap:1rem}
+.stack-sm{display:flex;flex-direction:column;gap:.55rem}
+
+.eyebrow{font-family:var(--mono);font-size:.6rem;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--accent);margin:0}
+h2{font-size:clamp(1.35rem,2.4vw,1.75rem)}
+h3{font-size:1.02rem}
+h4{font-size:.9rem;color:var(--ink-2)}
+.lede{color:var(--ink-2);font-size:1.02rem}
+.note{color:var(--label);font-size:.86rem;max-width:var(--measure)}
+.missing{color:var(--warn);font-family:var(--mono);font-size:.85em}
+
+/* ------------------------------------------------------------------ hero */
+header{padding:clamp(3.5rem,9vw,6rem) 0 3rem;position:relative;overflow:hidden}
+header canvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;
+  opacity:.5;pointer-events:none}
+header .wrap{position:relative;z-index:1;display:flex;flex-direction:column;gap:1.4rem}
+h1{font-size:clamp(2.1rem,5.6vw,3.4rem);letter-spacing:-.035em;font-weight:700}
+h1 em{font-style:normal;color:var(--accent)}
+.byline{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--label);display:flex;flex-wrap:wrap;gap:.5rem 1.25rem}
+
+/* ------------------------------------------------------------------- kpi */
+.kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+@media(max-width:60rem){.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi > div{background:var(--panel);padding:1.05rem 1.15rem;
+  display:flex;flex-direction:column;gap:.3rem;min-width:0}
+.kpi .v{font-family:var(--mono);font-size:1.5rem;font-weight:700;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .k{font-family:var(--mono);font-size:.56rem;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--label)}
+.kpi .s{font-size:.76rem;color:var(--label);line-height:1.4}
+.v.ok{color:var(--ok)} .v.accent{color:var(--accent)} .v.warn{color:var(--warn)}
+
+/* ----------------------------------------------------------------- cards */
+.cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:1.15rem 1.25rem;display:flex;flex-direction:column;gap:.55rem}
+.card p{font-size:.88rem;color:var(--ink-2)}
+.card .meta{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--label)}
+
+/* ---------------------------------------------------------------- tables */
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;
+  background:var(--panel)}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+thead th{font-family:var(--mono);font-size:.56rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--label);font-weight:400;text-align:left;
+  padding:.75rem .95rem;border-bottom:1px solid var(--line-2);white-space:nowrap;
+  background:var(--raised)}
+tbody td{padding:.66rem .95rem;border-bottom:1px solid var(--line);
+  color:var(--ink-2);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--mono);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.mono,th.mono{font-family:var(--mono);white-space:nowrap}
+td strong{color:var(--ink);font-weight:600}
+
+.pill{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;
+  border:1px solid currentColor;white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.bad{color:var(--fault)} .pill.warn{color:var(--warn)}
+
+/* -------------------------------------------------------------- diagrams */
+figure{margin:0;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:1.4rem;display:flex;flex-direction:column;gap:.9rem}
+figure .scroll{border:0;border-radius:0;background:transparent}
+figure svg{display:block;max-width:100%;height:auto;color:var(--ink-2)}
+figcaption{font-size:.8rem;color:var(--label);max-width:var(--measure)}
+
+/* ----------------------------------------------------------------- bugs */
+.bug{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--fault);
+  border-radius:10px;padding:1.2rem 1.35rem;display:flex;flex-direction:column;gap:.7rem}
+.bug h3{font-size:.98rem}
+.bug dl{margin:0;display:grid;grid-template-columns:6.5rem 1fr;gap:.45rem 1rem;
+  font-size:.86rem}
+@media(max-width:44rem){.bug dl{grid-template-columns:1fr;gap:.15rem}
+  .bug dd{margin-bottom:.5rem}}
+.bug dt{font-family:var(--mono);font-size:.56rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--label);padding-top:.28rem}
+.bug dd{margin:0;color:var(--ink-2)}
+.bug dd code{font-size:.8em}
+
+/* ------------------------------------------------------------------- cta */
+.cta{display:inline-flex;align-items:center;gap:.6rem;font-family:var(--mono);
+  font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;
+  background:var(--accent);color:#140f28;text-decoration:none;font-weight:700;
+  padding:.72rem 1.15rem;border-radius:8px;width:fit-content}
+.cta:hover{background:#c4b1ff}
+.cta.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line-2)}
+.cta.ghost:hover{background:var(--raised);color:var(--ink)}
+.row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+
+pre{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:1rem 1.15rem;overflow-x:auto;font-family:var(--mono);font-size:.78rem;
+  line-height:1.7;color:var(--ink-2)}
+pre .c{color:var(--label)}
+ul{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.45rem}
+li{color:var(--ink-2);font-size:.92rem}
+li strong{color:var(--ink);font-weight:600}
+
+footer{padding:2.5rem 0 4rem;border-top:1px solid var(--line);color:var(--label);
+  font-family:var(--mono);font-size:.66rem;line-height:1.9}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <p class="eyebrow">ml-infra-platform</p>
+    <h1>Three correct systems<br>do not make <em>one</em> correct system.</h1>
+    <p class="lede prose">
+      A Raft consensus engine, an HNSW vector index, and a distributed training
+      framework, each already tested on its own, composed into one platform:
+      models train, their embeddings are replicated through consensus into a
+      vector store, and a control plane runs both. The engines are unmodified.
+      Everything interesting happens at the seams between them, so that is where
+      this project does its testing.
+    </p>
+    <p class="byline">
+      <span>Abhineeth Duddela</span>
+      <span>generated 2026-08-26T20:39:00+00:00</span>
+      <span>python 3.13.0</span>
+      <span>numpy 2.5.1</span>
+      <span>90.9s to reproduce</span>
+    </p>
+    <div class="row">
+      <a class="cta" href="dashboard.html">Watch the recorded session &#8594;</a>
+      <a class="cta ghost" href="https://github.com/abho7/ml-infra-platform">Source</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="kpi"><div><span class="v ok">8/8</span><span class="k">named scenarios</span><span class="s">cross-layer fault sequences</span></div><div><span class="v ok">60/60</span><span class="k">fuzz seeds clean</span><span class="s">randomized fault schedules</span></div><div><span class="v accent">2,032</span><span class="k">embeddings</span><span class="s">written through Raft, then read back</span></div><div><span class="v ok">0</span><span class="k">acked but lost</span><span class="s">the failure this project exists to detect</span></div><div><span class="v ">488</span><span class="k">invariant checks</span><span class="s">run continuously, not at the end</span></div><div><span class="v ">5</span><span class="k">overlapping faults</span><span class="s">in two layers at once, measured</span></div><div><span class="v warn">3</span><span class="k">bugs found</span><span class="s">in the composition, all fixed</span></div><div><span class="v ">3</span><span class="k">tick read cost</span><span class="s">linearizable over stale</span></div></div>
+    <p class="note">
+      Every figure on this page was produced by <code>python run_experiments.py</code>
+      and read out of <code>site/results.json</code>. Nothing here is typed in by
+      hand or estimated; where a value was not measured, the page says so.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">the claim</p>
+    <h2>What is actually being proven</h2>
+    <div class="prose stack">
+      <p class="lede">
+        The three engines come with their own suites, and they pass: 23 tests for
+        Raft, 28 for HNSW, 68 for the training framework. None of them says
+        anything about what happens when a training worker dies at the same
+        moment the storage cluster splits in half.
+      </p>
+      <p style="color:var(--ink-2);font-size:.94rem">
+        That is the gap. A component proof is a statement about a component under
+        its own assumptions; composing components creates states that neither
+        one's assumptions cover. The first bug below is exactly that shape: Raft
+        behaved correctly, HNSW behaved correctly, and the platform crashed every
+        replica in the cluster.
+      </p>
+    </div>
+    <figure>
+      <div class="scroll">
+<svg viewBox="0 0 1000 400" role="img" aria-label="A training job's embeddings
+flow through a storage client into the Raft leader, replicate to five replicas,
+and are applied into each replica's own HNSW index; linearizable reads confirm
+leadership before serving.">
+<defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+  </marker>
+  <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="#a78bfa"/>
+  </marker>
+</defs>
+<g font-family="ui-monospace,Consolas,monospace" font-size="12">
+
+  <!-- training layer -->
+  <rect x="20" y="40" width="180" height="120" rx="8" fill="none"
+        stroke="currentColor" stroke-opacity=".45"/>
+  <text x="30" y="30" font-size="10" letter-spacing="1.6"
+        fill="currentColor" opacity=".65">TRAINING ENGINE</text>
+  <rect x="36" y="58" width="148" height="26" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="110" y="75" text-anchor="middle" fill="currentColor">Coordinator</text>
+  <rect x="36" y="92" width="70" height="26" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="71" y="109" text-anchor="middle" fill="currentColor" font-size="11">w1..w4</text>
+  <rect x="114" y="92" width="70" height="26" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="149" y="109" text-anchor="middle" fill="currentColor" font-size="11">all-reduce</text>
+  <rect x="36" y="126" width="148" height="24" rx="4" fill="#a78bfa" fill-opacity=".14"/>
+  <text x="110" y="142" text-anchor="middle" fill="#a78bfa" font-size="11">logits &#8594; embeddings</text>
+
+  <!-- publisher / client -->
+  <rect x="250" y="76" width="130" height="52" rx="6" fill="none" stroke="#a78bfa"/>
+  <text x="315" y="98" text-anchor="middle" fill="#a78bfa">StorageClient</text>
+  <text x="315" y="115" text-anchor="middle" fill="currentColor" font-size="10"
+        opacity=".7">redirect to leader</text>
+  <line x1="202" y1="102" x2="246" y2="102" stroke="#a78bfa" stroke-width="1.5"
+        marker-end="url(#arA)"/>
+  <text x="224" y="93" text-anchor="middle" fill="#a78bfa" font-size="10">write</text>
+
+  <!-- raft leader -->
+  <rect x="450" y="66" width="140" height="72" rx="6" fill="none" stroke="currentColor"/>
+  <text x="520" y="90" text-anchor="middle" fill="currentColor">Raft leader</text>
+  <text x="520" y="108" text-anchor="middle" font-size="10" fill="currentColor"
+        opacity=".7">append + replicate</text>
+  <text x="520" y="124" text-anchor="middle" font-size="10" fill="currentColor"
+        opacity=".7">commit at quorum</text>
+  <line x1="382" y1="102" x2="446" y2="102" stroke="#a78bfa" stroke-width="1.5"
+        marker-end="url(#arA)"/>
+  <text x="414" y="93" text-anchor="middle" fill="#a78bfa" font-size="10">propose</text>
+
+  <!-- replicas -->
+  <rect x="690" y="24" width="290" height="180" rx="8" fill="none"
+        stroke="currentColor" stroke-opacity=".45"/>
+  <text x="700" y="16" font-size="10" letter-spacing="1.6" fill="currentColor"
+        opacity=".65">FIVE REPLICAS</text>
+
+  <rect x="706" y="38" width="96" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="754" y="54" text-anchor="middle" fill="currentColor" font-size="11">log n1</text>
+  <line x1="806" y1="50" x2="842" y2="50" stroke="currentColor"
+        stroke-opacity=".6" marker-end="url(#ar)"/>
+  <rect x="846" y="38" width="118" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="905" y="54" text-anchor="middle" fill="currentColor" font-size="11">HNSW index</text>
+  <rect x="706" y="71" width="96" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="754" y="87" text-anchor="middle" fill="currentColor" font-size="11">log n2</text>
+  <line x1="806" y1="83" x2="842" y2="83" stroke="currentColor"
+        stroke-opacity=".6" marker-end="url(#ar)"/>
+  <rect x="846" y="71" width="118" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="905" y="87" text-anchor="middle" fill="currentColor" font-size="11">HNSW index</text>
+  <rect x="706" y="104" width="96" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="754" y="120" text-anchor="middle" fill="currentColor" font-size="11">log n3</text>
+  <line x1="806" y1="116" x2="842" y2="116" stroke="currentColor"
+        stroke-opacity=".6" marker-end="url(#ar)"/>
+  <rect x="846" y="104" width="118" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="905" y="120" text-anchor="middle" fill="currentColor" font-size="11">HNSW index</text>
+  <rect x="706" y="137" width="96" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="754" y="153" text-anchor="middle" fill="currentColor" font-size="11">log n4</text>
+  <line x1="806" y1="149" x2="842" y2="149" stroke="currentColor"
+        stroke-opacity=".6" marker-end="url(#ar)"/>
+  <rect x="846" y="137" width="118" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="905" y="153" text-anchor="middle" fill="currentColor" font-size="11">HNSW index</text>
+  <rect x="706" y="170" width="96" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="754" y="186" text-anchor="middle" fill="currentColor" font-size="11">log n5</text>
+  <line x1="806" y1="182" x2="842" y2="182" stroke="currentColor"
+        stroke-opacity=".6" marker-end="url(#ar)"/>
+  <rect x="846" y="170" width="118" height="24" rx="4" fill="currentColor" fill-opacity=".07"/>
+  <text x="905" y="186" text-anchor="middle" fill="currentColor" font-size="11">HNSW index</text>
+  <text x="835" y="224" text-anchor="middle" font-size="10" fill="currentColor"
+        opacity=".7">apply, deduped by log index and by id</text>
+  <line x1="592" y1="102" x2="686" y2="102" stroke="currentColor" stroke-width="1.5"
+        marker-end="url(#ar)"/>
+  <text x="639" y="93" text-anchor="middle" fill="currentColor" font-size="10">AppendEntries</text>
+
+  <!-- read path: out of a replica's index, back to the client -->
+  <path d="M974 206 L974 288 L315 288 L315 136" fill="none" stroke="#a78bfa"
+        stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arA)"/>
+  <text x="645" y="279" text-anchor="middle" fill="#a78bfa" font-size="10">
+    linearizable read: confirm leadership, then wait for applied &#8805; read index</text>
+
+  <!-- ack path: only once the entry is committed -->
+  <path d="M520 140 L520 332 L110 332 L110 162" fill="none" stroke="currentColor"
+        stroke-width="1.5" stroke-dasharray="3 4" stroke-opacity=".65"
+        marker-end="url(#ar)"/>
+  <text x="315" y="323" text-anchor="middle" fill="currentColor" font-size="10"
+        opacity=".75">ack only after quorum commit in the current term</text>
+
+  <!-- legend: the encoding repeats, so it is worth naming -->
+  <line x1="20" y1="360" x2="980" y2="360" stroke="currentColor" stroke-opacity=".18"/>
+  <rect x="20" y="376" width="22" height="14" rx="3" fill="none" stroke="#a78bfa"/>
+  <text x="50" y="387" font-size="10" fill="currentColor" opacity=".75">
+    written for this platform</text>
+  <rect x="230" y="376" width="22" height="14" rx="3" fill="none"
+        stroke="currentColor" stroke-opacity=".5"/>
+  <text x="260" y="387" font-size="10" fill="currentColor" opacity=".75">
+    the three engines, used unmodified</text>
+</g>
+</svg>
+</div>
+      <figcaption>
+        The write path, the read path, and the acknowledgement path. An embedding
+        is acknowledged to the training job only once it is quorum-committed
+        under the leader's current term; each replica applies the same committed
+        log into its own HNSW index, so the indices are built independently and
+        must agree by construction rather than by copying.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">consistency</p>
+    <h2>The guarantee, stated exactly</h2>
+    <p class="note">
+      The storage engine on its own offers reads from local state, which can lag.
+      Linearizable reads are implemented in this platform as a ReadIndex protocol
+      layered on top of it, not inherited from it.
+    </p>
+    <div class="scroll"><table>
+      <thead><tr><th>operation</th><th>guarantee</th><th>cost</th>
+        <th>under partition</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><strong>write</strong></td>
+          <td>Linearizable. Acknowledged only after quorum commit in the
+              leader's current term.</td>
+          <td class="num">27 ticks p50</td>
+          <td>Minority side cannot commit; the write returns unacknowledged
+              and is never claimed as durable.</td></tr>
+        <tr><td class="mono"><strong>read: linearizable</strong></td>
+          <td>Reflects every write acknowledged before the read began. Leadership
+              is confirmed by a heartbeat quorum round, then the read waits for
+              <code>applied &#8805; read index</code>.</td>
+          <td class="num">3 ticks,
+              0.563 ms</td>
+          <td><strong>Refuses.</strong> Leadership cannot be confirmed, so the
+              read fails rather than serving something it cannot vouch for.</td></tr>
+        <tr><td class="mono"><strong>read: stale</strong></td>
+          <td>Served from any replica's local index with no coordination. May lag
+              arbitrarily. Opt-in, never the default.</td>
+          <td class="num">0 ticks,
+              0.421 ms</td>
+          <td>Succeeds, possibly with old data. That is the mode's contract, so
+              it is not counted as a violation.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">A linearizable read pays a heartbeat quorum round to confirm leadership; a stale read pays nothing and may lag. There is no leader lease here, so every linearizable read pays the full round trip -- a real system amortises that.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">the recorded run</p>
+    <h2>five nodes, one training job, 3 injected faults across both layers</h2>
+    <p class="lede prose">
+      130 frames captured from one real execution: a 4-worker job
+      publishing embeddings through consensus while a node dies, the cluster
+      splits, and a training worker is killed mid-partition. The dashboard replays
+      these frames; it is the same interface that runs live against the control
+      plane, with recorded frames substituted for polled ones.
+    </p>
+    <figure>
+      <div class="scroll">
+<svg viewBox="0 0 900 200" role="img" aria-label="Cluster health across the
+recorded session, with each injected fault and each recovery marked, and the
+count of acknowledged embeddings rising throughout.">
+<g font-family="ui-monospace,Consolas,monospace">
+  <text x="0" y="39" font-size="9.5" fill="currentColor" opacity=".7">health</text>
+  <rect x="44.00" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="50.45" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="56.89" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="63.34" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="69.78" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="76.23" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="82.68" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="89.12" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="95.57" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="102.02" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="108.46" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="114.91" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="121.35" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="127.80" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="134.25" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="140.69" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="147.14" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="153.58" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="160.03" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="166.48" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="172.92" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="179.37" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="185.82" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="192.26" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="198.71" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="205.15" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="211.60" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="218.05" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="224.49" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="230.94" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="237.38" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="243.83" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="250.28" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="256.72" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="263.17" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="269.62" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="276.06" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="282.51" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="288.95" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="295.40" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="301.85" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="308.29" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="314.74" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="321.18" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="327.63" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="334.08" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="340.52" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="346.97" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="353.42" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="359.86" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="366.31" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="372.75" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="379.20" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="385.65" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="392.09" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="398.54" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="404.98" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="411.43" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="417.88" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="424.32" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="430.77" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="437.22" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="443.66" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="450.11" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="456.55" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="463.00" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="469.45" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="475.89" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="482.34" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="488.78" y="26" width="6.95" height="18" fill="#fbbf24" fill-opacity=".55"/><rect x="495.23" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="501.68" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="508.12" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="514.57" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="521.02" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="527.46" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="533.91" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="540.35" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="546.80" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="553.25" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="559.69" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="566.14" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="572.58" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="579.03" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="585.48" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="591.92" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="598.37" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="604.82" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="611.26" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="617.71" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="624.15" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="630.60" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="637.05" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="643.49" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="649.94" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="656.38" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="662.83" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="669.28" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="675.72" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="682.17" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="688.62" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="695.06" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="701.51" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="707.95" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="714.40" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="720.85" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="727.29" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="733.74" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="740.18" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="746.63" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="753.08" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="759.52" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="765.97" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="772.42" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="778.86" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="785.31" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="791.75" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="798.20" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="804.65" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="811.09" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="817.54" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="823.98" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="830.43" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="836.88" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="843.32" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="849.77" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="856.22" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="862.66" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="869.11" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/><rect x="875.55" y="26" width="6.95" height="18" fill="#4ade80" fill-opacity=".55"/>
+  <line x1="134.9" y1="26" x2="134.9" y2="142" stroke="#f43f5e" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".75"/><circle cx="134.9" cy="18" r="3" fill="#f43f5e"/><line x1="238.9" y1="26" x2="238.9" y2="142" stroke="#f43f5e" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".75"/><circle cx="238.9" cy="18" r="3" fill="#f43f5e"/><line x1="277.9" y1="26" x2="277.9" y2="142" stroke="#f43f5e" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".75"/><circle cx="277.9" cy="18" r="3" fill="#f43f5e"/><line x1="420.8" y1="26" x2="420.8" y2="142" stroke="#4ade80" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".75"/><circle cx="420.8" cy="18" r="3" fill="#4ade80"/><line x1="498.7" y1="26" x2="498.7" y2="142" stroke="#4ade80" stroke-width="1" stroke-dasharray="3 3" stroke-opacity=".75"/><circle cx="498.7" cy="18" r="3" fill="#4ade80"/>
+  <polyline points="44.00,142.00 50.50,142.00 56.99,142.00 63.49,142.00 69.98,142.00 76.48,142.00 82.98,142.00 89.47,142.00 95.97,142.00 102.47,132.31 108.96,132.31 115.46,132.31 121.95,132.31 128.45,132.31 134.95,132.31 141.44,132.31 147.94,132.31 154.43,132.31 160.93,132.31 167.43,122.62 173.92,122.62 180.42,122.62 186.91,122.62 193.41,122.62 199.91,122.62 206.40,122.62 212.90,122.62 219.40,122.62 225.89,122.62 232.39,112.93 238.88,112.93 245.38,112.93 251.88,112.93 258.37,112.93 264.87,112.93 271.36,112.93 277.86,112.93 284.36,112.93 290.85,112.93 297.35,103.24 303.84,103.24 310.34,103.24 316.84,103.24 323.33,103.24 329.83,103.24 336.33,103.24 342.82,103.24 349.32,103.24 355.81,103.24 362.31,93.55 368.81,93.55 375.30,93.55 381.80,93.55 388.29,93.55 394.79,93.55 401.29,93.55 407.78,93.55 414.28,93.55 420.78,93.55 427.27,85.07 433.77,85.07 440.26,85.07 446.76,85.07 453.26,85.07 459.75,85.07 466.25,85.07 472.74,85.07 479.24,85.07 485.74,85.07 492.23,75.38 498.73,75.38 505.22,75.38 511.72,75.38 518.22,75.38 524.71,75.38 531.21,75.38 537.71,75.38 544.20,75.38 550.70,75.38 557.19,65.69 563.69,65.69 570.19,65.69 576.68,65.69 583.18,65.69 589.67,65.69 596.17,65.69 602.67,65.69 609.16,65.69 615.66,65.69 622.16,56.00 628.65,56.00 635.15,56.00 641.64,56.00 648.14,56.00 654.64,56.00 661.13,56.00 667.63,56.00 674.12,56.00 680.62,56.00 687.12,56.00 693.61,56.00 700.11,56.00 706.60,56.00 713.10,56.00 719.60,56.00 726.09,56.00 732.59,56.00 739.09,56.00 745.58,56.00 752.08,56.00 758.57,56.00 765.07,56.00 771.57,56.00 778.06,56.00 784.56,56.00 791.05,56.00 797.55,56.00 804.05,56.00 810.54,56.00 817.04,56.00 823.53,56.00 830.03,56.00 836.53,56.00 843.02,56.00 849.52,56.00 856.02,56.00 862.51,56.00 869.01,56.00 875.50,56.00 882.00,56.00" fill="none" stroke="#a78bfa" stroke-width="1.8"/>
+  <text x="0" y="68" font-size="9.5" fill="#a78bfa">71</text>
+  <text x="0" y="142" font-size="9.5" fill="#a78bfa">0</text>
+  <text x="44" y="192" font-size="9.5" fill="currentColor" opacity=".55">
+    frame 0</text>
+  <text x="882" y="192" text-anchor="end" font-size="9.5"
+        fill="currentColor" opacity=".55">frame 129</text>
+  <line x1="134.9" y1="142" x2="134.9" y2="162" stroke="#f43f5e" stroke-opacity=".3"/><text x="138.9" y="170" text-anchor="start" font-size="9.5" fill="#f43f5e">kill a follower</text><line x1="238.9" y1="142" x2="238.9" y2="175" stroke="#f43f5e" stroke-opacity=".3"/><text x="242.9" y="183" text-anchor="start" font-size="9.5" fill="#f43f5e">partition the cluster 2 | 3</text><line x1="277.9" y1="142" x2="277.9" y2="162" stroke="#f43f5e" stroke-opacity=".3"/><text x="281.9" y="170" text-anchor="start" font-size="9.5" fill="#f43f5e">kill a training worker, mid-partition</text><line x1="420.8" y1="142" x2="420.8" y2="175" stroke="#4ade80" stroke-opacity=".3"/><text x="424.8" y="183" text-anchor="start" font-size="9.5" fill="#4ade80">heal the partition</text><line x1="498.7" y1="142" x2="498.7" y2="162" stroke="#4ade80" stroke-opacity=".3"/><text x="502.7" y="170" text-anchor="start" font-size="9.5" fill="#4ade80">restart the dead node</text>
+</g>
+</svg></div>
+      <figcaption>
+        Cluster health per frame (green healthy, amber degraded), with each
+        injected fault marked in red and each recovery in green, and the running
+        count of acknowledged embeddings in violet. The violet curve never
+        falls: no acknowledged embedding was ever withdrawn, including across
+        the partition and the leadership change.
+      </figcaption>
+    </figure>
+    <div class="cards">
+      <div class="card"><span class="meta">acknowledged</span>
+        <h3>71 embeddings</h3>
+        <p>Every one still queryable from the leader after the faults healed:
+           71 of 71.</p></div>
+      <div class="card"><span class="meta">in flight when a node died</span>
+        <h3>1 lost</h3>
+        <p>Never acknowledged, so never claimed. This is correct behaviour and
+           the direct analogue of an uncommitted Raft entry, so it is reported
+           rather than counted as a violation.</p></div>
+      <div class="card"><span class="meta">after settling</span>
+        <h3>converged</h3>
+        <p>All five replicas returned identical index digests, having each built
+           their HNSW graph independently from the same committed log.</p></div>
+      <div class="card"><span class="meta">the job itself</span>
+        <h3>0.9900 accuracy</h3>
+        <p>The model still trained. Losing a worker mid-partition reshards onto
+           the survivors rather than failing the job.</p></div>
+    </div>
+    <a class="cta" href="dashboard.html">Open the replay &#8594;</a>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">invariants</p>
+    <h2>Six properties that only exist at the seams</h2>
+    <p class="note">
+      Checked after every round of every scenario and every fuzz seed, not once
+      at the end. 488 checks across the named scenarios alone.
+    </p>
+    <div class="cards">
+      <div class="card"><span class="meta">1 &middot; durability</span>
+        <h4>Acknowledged writes survive leadership</h4>
+        <p>An embedding acknowledged to a training job is present on every
+           leader elected afterwards.</p></div>
+      <div class="card"><span class="meta">2 &middot; convergence</span>
+        <h4>Replicas agree on their common prefix</h4>
+        <p>Two in-sync replicas hold identical applied sequences. Catches seed
+           divergence and apply-order drift.</p></div>
+      <div class="card"><span class="meta">3 &middot; watermark</span>
+        <h4>The index matches what the replica claims</h4>
+        <p>A replica's vector count matches the committed prefix it says it
+           applied. Catches a reset that drops one but not the other.</p></div>
+      <div class="card"><span class="meta">4 &middot; no phantoms</span>
+        <h4>Nothing searchable was uncommitted</h4>
+        <p>Every vector in an index traces to a committed log entry.</p></div>
+      <div class="card"><span class="meta">5 &middot; exactly once</span>
+        <h4>No embedding stored twice</h4>
+        <p>Re-applying a log prefix after restart must not duplicate. This is
+           the invariant bug 1 violated.</p></div>
+      <div class="card"><span class="meta">6 &middot; read honesty</span>
+        <h4>A linearizable read never lies</h4>
+        <p>The state served is no older than any write acknowledged before the
+           read began, or the read fails.</p></div>
+    </div>
+    <div class="prose stack-sm">
+      <h4>Deliberately not violations</h4>
+      <ul>
+        <li>A <strong>stale read lagging</strong> &mdash; that is the mode's
+            contract, and counting it would make the mode meaningless.</li>
+        <li>A <strong>minority-side linearizable read failing</strong> &mdash;
+            refusing is the correct answer and the entire point of ReadIndex.</li>
+        <li>An <strong>unacknowledged in-flight write vanishing</strong> when its
+            node dies &mdash; correct, and reported separately as
+            <em>lost uncommitted</em> so it stays visible rather than hidden.</li>
+      </ul>
+      <p class="note">
+        Each of the six has a mutation test that breaks it deliberately and
+        asserts the checker fires and names the right one. A correctness harness
+        never observed to fail is not evidence; every &ldquo;0 violations&rdquo;
+        on this page is worth exactly as much as those tests.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">results</p>
+    <h2>Cross-layer scenarios</h2>
+    <p class="note">
+      Named fault sequences, each run against a live training job rather than an
+      idle cluster. The <em>overlaps</em> column is measured from the schedule
+      and counts fault windows that were open in <em>both</em> layers at the same
+      instant &mdash; so it is worth reading it honestly: most of these rows are
+      a storage fault landing while training continues, and only the ones with a
+      non-zero count are genuinely simultaneous cross-layer failures. Reporting
+      that column is what stops the headline claim from going quietly vacuous.
+    </p>
+    <div class="scroll"><table>
+      <thead><tr><th>scenario</th><th class="num">overlaps</th>
+        <th class="num">acked</th><th class="num">queryable</th>
+        <th class="num">lost in flight</th><th>converged</th><th>result</th></tr></thead>
+      <tbody><tr><td><strong>No faults</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">none</div></td><td class="num">0</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Worker dies while storage is partitioned</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">Partition [n1,n2]|[n3,n4,n5] rounds 15-45; KillWorker at 20</div></td><td class="num">1</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Storage node dies mid-write</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">KillNode n2@10, KillNode on the leader@25</div></td><td class="num">0</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Slow link during publication</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">DelayLink n1-&gt;n3 and n1-&gt;n4 by 8 ticks, rounds 12-40</div></td><td class="num">0</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Cascading failures across both layers</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">KillNode n5@8; KillWorker@14; Partition rounds 20-38; KillWorker@26; RestartNode n5@42</div></td><td class="num">1</td><td class="num">39</td><td class="num">39</td><td class="num">1</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Leader isolated on the minority side</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">Partition [n1]|[n2..n5] rounds 18-50</div></td><td class="num">0</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Replica rejoins after missing many writes</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">KillNode n4@6, RestartNode n4@45</div></td><td class="num">0</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr><tr><td><strong>Simultaneous faults in both layers</strong><div class="note" style="font-size:.78rem;margin-top:.2rem">KillNode n5@10; KillWorker@10; Partition rounds 10-40; DelayLink n1-&gt;n2 rounds 10-40</div></td><td class="num">3</td><td class="num">40</td><td class="num">40</td><td class="num">0</td><td class="mono">yes</td><td><span class="pill ok">pass</span></td></tr></tbody>
+    </table></div>
+
+    <h3>Randomized sweep</h3>
+    <div class="kpi">
+      <div><span class="v ok">60/60</span><span class="k">seeds clean</span><span class="s">each a different fault schedule</span></div>
+      <div><span class="v accent">1,713</span><span class="k">embeddings</span><span class="s">acknowledged across the sweep</span></div>
+      <div><span class="v ok">0</span><span class="k">acked, not queryable</span><span class="s">the headline failure mode</span></div>
+      <div><span class="v ">0.9240</span><span class="k">lowest accuracy</span><span class="s">worst-case model, under faults</span></div>
+    </div>
+    <p class="note">
+      Faults are bounded so a quorum always survives; a cluster deliberately
+      driven below quorum stops being able to commit, which tests nothing about
+      the composition. A failing seed replays exactly:
+      <code>python -m mlplat.chaos.fuzz</code>.
+    </p>
+
+    <h3>Cross-validated against real sockets</h3>
+    <div class="prose stack-sm">
+      <p style="color:var(--ink-2);font-size:.94rem">
+        Everything above runs on a deterministic queued transport. That is what
+        makes a fault reproducible from a seed, but it is also a modelling
+        assumption, and an assumption nobody checks is just a hope: if the
+        storage layer only behaves because messages arrive in a tidy order no
+        real network would produce, these results describe the harness rather
+        than the system.
+      </p>
+      <p style="color:var(--ink-2);font-size:.94rem">
+        So the same <code>VectorStateMachine</code> is also run under the Raft
+        engine's real asyncio TCP server &mdash; three processes on localhost,
+        real sockets, real election timeouts &mdash; and driven through the
+        engine's own client. Replicas converge to identical index digests,
+        acknowledged writes survive a node dying, and the duplicate-id fix from
+        bug 1 holds. Reverting that fix reproduces the original
+        <code>ValueError</code> inside the server's apply path over TCP too,
+        which is how these three tests are known not to be vacuous.
+      </p>
+    </div>
+
+    <div class="kpi">
+      <div><span class="v ok">64</span><span class="k">tests passing</span><span class="s">measured by running them, not recalled</span></div>
+      <div><span class="v ok">0</span><span class="k">failing</span><span class="s">at the time this page was generated</span></div>
+      <div><span class="v accent">3</span><span class="k">over real TCP</span><span class="s">cross-validating the deterministic transport</span></div>
+      <div><span class="v ">6</span><span class="k">mutation tests</span><span class="s">one per invariant, each expects a catch</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">honestly</p>
+    <h2>Bugs found in the composition</h2>
+    <p class="lede prose">
+      Three, all fixed, each with a regression test. Two were mine. One was in
+      the correctness checker itself, which is worth stating plainly: the only
+      violation the sweep ever reported turned out to be the harness being
+      wrong, not the platform.
+    </p>
+    <div class="stack"><article class="bug">
+  <h3>1. The same embedding id committed at two log indices</h3>
+  <dl>
+    <dt>found by</dt><dd>randomized cross-layer sweep, during a partition</dd>
+    <dt>symptom</dt><dd><code>ValueError: id 'job:s24@48' already exists</code> raised inside apply, on every replica at once.</dd>
+    <dt>cause</dt><dd>The client proposed a write, timed out waiting for the commit, and re-proposed it. When the partition healed, both entries committed. The state machine deduped by log-index watermark, which cannot help here: both indices are above the watermark, so both look new. <code>VectorDB.insert</code> then refused the duplicate id and raised.</dd>
+    <dt>whose bug</dt><dd>Neither engine. Raft committed two entries because it was asked to twice; HNSW refused a duplicate because it should. The defect was treating an unconfirmed proposal as safe to retry, which is a claim about at-most-once delivery that Raft never made.</dd>
+    <dt>fix</dt><dd>Two halves, both necessary. The client now returns an unconfirmed result with its log index instead of re-proposing. The state machine additionally suppresses a repeated id, because a state machine over a replicated log must be <strong>total</strong>: an exception during apply does not reject one bad write, it stops that replica applying anything further while its peers continue.</dd>
+    <dt>regression</dt><dd><code>test_regression_same_id_committed_twice_does_not_kill_a_replica, test_regression_client_does_not_repropose_an_unconfirmed_write</code></dd>
+    <dt>file</dt><dd><code>storage/client.py + storage/statemachine.py</code></dd>
+  </dl>
+</article><article class="bug">
+  <h3>2. A shared event log silently replaced by an empty one</h3>
+  <dl>
+    <dt>found by</dt><dd>the cross-layer timeline test, which saw zero event kinds</dd>
+    <dt>symptom</dt><dd>Storage and training events landed in three separate logs, so the unified timeline the whole dashboard depends on was empty for every layer but one.</dd>
+    <dt>cause</dt><dd><code>EventLog</code> defines <code>__len__</code>, so an empty log is <em>falsy</em>. Three constructors used <code>self.events = events or EventLog()</code>, which discards the caller's log precisely when it is new and empty, which is always at startup.</dd>
+    <dt>whose bug</dt><dd>Mine, in all three places, from one idiom copied forward.</dd>
+    <dt>fix</dt><dd><code>events if events is not None else EventLog()</code>, everywhere an optional shared object is accepted.</dd>
+    <dt>regression</dt><dd><code>test_events_from_both_layers_share_one_timeline</code></dd>
+    <dt>file</dt><dd><code>storage/cluster.py, training/job.py, training/publisher.py</code></dd>
+  </dl>
+</article><article class="bug">
+  <h3>3. The correctness checker was testing the wrong property</h3>
+  <dl>
+    <dt>found by</dt><dd>fuzz seed 57, which the sweep reported as a violation</dd>
+    <dt>symptom</dt><dd>A linearizable read was flagged as dishonest: 8 acknowledged ids, only 6 returned by a k-NN query at k=13.</dd>
+    <dt>cause</dt><dd>The invariant asserted that a k-NN query returns every acknowledged id. HNSW is an <strong>approximate</strong> index and a k-NN query is not an enumeration; replaying the seed showed all 8 ids present in the serving replica. The check conflated recall (an approximation property) with staleness (a consistency property).</dd>
+    <dt>whose bug</dt><dd>The harness, not the platform. Worth stating plainly: the one violation this project's sweep ever reported was the checker's own bug, which is exactly why the mutation tests exist.</dd>
+    <dt>fix</dt><dd>Invariant 6 now asserts containment in the state actually read from, which is the consistency claim. Recall is recorded as an observation alongside it rather than asserted.</dd>
+    <dt>regression</dt><dd><code>test_regression_read_honesty_tests_containment_not_search_recall</code></dd>
+    <dt>file</dt><dd><code>chaos/checker.py, invariant 6</code></dd>
+  </dl>
+</article></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">measured</p>
+    <h2>Benchmarks</h2>
+    <p class="note">
+      Wall-clock figures are from one machine and one process, and are the least
+      transferable numbers here. Tick counts are protocol costs and are the ones
+      that would carry to a real deployment, so they are reported alongside
+      everywhere.
+    </p>
+
+    <h3>End-to-end: training step to queryable embedding</h3>
+    <div class="kpi">
+      <div><span class="v ">38.50</span><span class="k">ms p50</span><span class="s">checkpoint published and read back</span></div>
+      <div><span class="v ">73.33</span><span class="k">ms p95</span><span class="s">worst of the sampled checkpoints</span></div>
+      <div><span class="v accent">27</span><span class="k">ticks p50</span><span class="s">the protocol cost</span></div>
+      <div><span class="v ok">12/12</span><span class="k">queryable</span><span class="s">every checkpoint, confirmed by a real read</span></div>
+    </div>
+    <p class="note">wall_ms is this machine; consensus_ticks is the protocol cost and is what would carry to a real deployment. Each sample covers one checkpoint of embeddings plus a linearizable read confirming them.</p>
+
+    <h3>Scaling</h3>
+    <div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(20rem,1fr))">
+      <div class="stack-sm">
+        <h4>Storage width &mdash; more nodes, 4 workers fixed</h4>
+        <div class="scroll"><table>
+          <thead><tr><th>nodes</th><th class="num">quorum</th><th class="num">acked</th>
+            <th class="num">ticks</th><th class="num">ticks/write</th>
+            <th class="num">wall s</th></tr></thead>
+          <tbody><tr><td class="num">3</td><td class="num">2</td><td class="num">24</td><td class="num">119</td><td class="num">4.96</td><td class="num">0.061</td></tr><tr><td class="num">5</td><td class="num">3</td><td class="num">24</td><td class="num">117</td><td class="num">4.88</td><td class="num">0.089</td></tr><tr><td class="num">7</td><td class="num">4</td><td class="num">24</td><td class="num">117</td><td class="num">4.88</td><td class="num">0.123</td></tr><tr><td class="num">9</td><td class="num">5</td><td class="num">24</td><td class="num">116</td><td class="num">4.83</td><td class="num">0.153</td></tr></tbody>
+        </table></div>
+      </div>
+      <div class="stack-sm">
+        <h4>Training width &mdash; more workers, 5 nodes fixed</h4>
+        <div class="scroll"><table>
+          <thead><tr><th>workers</th><th class="num">rounds</th><th class="num">wall s</th>
+            <th class="num">accuracy</th><th class="num">acked</th></tr></thead>
+          <tbody><tr><td class="num">2</td><td class="num">30</td><td class="num">0.096</td><td class="num">0.9676</td><td class="num">24</td></tr><tr><td class="num">4</td><td class="num">30</td><td class="num">0.106</td><td class="num">0.9726</td><td class="num">24</td></tr><tr><td class="num">8</td><td class="num">30</td><td class="num">0.165</td><td class="num">0.9689</td><td class="num">24</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+    <p class="note">Storage and training width are swept separately: more nodes make a write costlier, more workers make a step cheaper, and sweeping together would cancel them out.</p>
+
+    <h3>Recovery</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>fault</th><th class="num">recovered</th>
+        <th class="num">median ticks</th><th class="num">max ticks</th></tr></thead>
+      <tbody><tr><td>follower killed</td><td class="num">3/3</td><td class="num">3</td><td class="num">3</td></tr><tr><td>leader killed</td><td class="num">3/3</td><td class="num">15</td><td class="num">16</td></tr><tr><td>one node partitioned off</td><td class="num">3/3</td><td class="num">3</td><td class="num">3</td></tr><tr><td>leader isolated</td><td class="num">3/3</td><td class="num">108</td><td class="num">108</td></tr><tr><td>leader + one follower killed</td><td class="num">3/3</td><td class="num">32</td><td class="num">40</td></tr></tbody>
+    </table></div>
+    <p class="note">Ticks from the fault to the first write that COMMITS after it, retrying with a fresh id each attempt. Time to elect a leader would be smaller and less honest: a cluster with a leader that cannot yet accept writes has not recovered. The client&#x27;s commit timeout is 25 ticks and is part of the number -- at the default 200 the client&#x27;s own patience dominated and the rows stopped being comparable.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">limits</p>
+    <h2>What this does not do</h2>
+    <div class="prose"><ul>
+      <li><strong>No snapshots.</strong> Neither the Raft engine nor this
+          platform truncates the log, so a rejoining replica catches up by full
+          replay and the log grows without bound. Fine at these sizes; the first
+          thing a real deployment would need.</li>
+      <li><strong>No leader lease.</strong> Every linearizable read pays a full
+          heartbeat quorum round, which is why the measured overhead is
+          3 ticks rather than zero. A real system amortises
+          that across a lease interval.</li>
+      <li><strong>Deterministic transport, not a network.</strong> The cluster
+          runs on a queued transport with modelled latency, drops and partitions.
+          That is what makes a fault reproducible from a seed, and it is also why
+          the wall-clock numbers are not deployment numbers.</li>
+      <li><strong>Deletion is soft.</strong> Inherited from the vector engine.
+          Vectors are tombstoned, not reclaimed.</li>
+      <li><strong>One shard.</strong> Every replica holds the entire index, so
+          storage capacity is one node's capacity. Sharding would be a
+          replication-group-per-shard change, not a change to any of this.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">reproduce</p>
+    <h2>Run it yourself</h2>
+    <pre><span class="c"># the three engines are cloned in as read-only dependencies</span>
+git clone https://github.com/abho7/ml-infra-platform &amp;&amp; cd ml-infra-platform
+pip install numpy pytest
+
+<span class="c"># every test, including the mutation tests behind every claim above</span>
+pytest -q
+
+<span class="c"># the live control plane, with a real dashboard at localhost:8950</span>
+python -m mlplat.control.cli serve
+
+<span class="c"># regenerate every number on this page</span>
+python run_experiments.py &amp;&amp; python build_site.py</pre>
+    <p class="note">
+      Dependencies are numpy and pytest. The Raft engine, the HNSW index, the
+      training framework, the transport, the control plane and its HTTP API are
+      all from scratch.
+    </p>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  ml-infra-platform &middot; Abhineeth Duddela &middot; &copy; 2026<br>
+  composed from
+  <a href="https://github.com/abho7/raft-kv-store">raft-kv-store</a>,
+  <a href="https://github.com/abho7/vectordb-hnsw">vectordb-hnsw</a> and
+  <a href="https://github.com/abho7/distributed-training-framework">distributed-training-framework</a>,
+  none of them modified<br>
+  measured 2026-08-26T20:39:00+00:00 on Windows-11-10.0.26200-SP0
+</div></footer>
+
+<script>
+/* An ambient vector field in the hero: points drifting, nearest neighbours
+   linked. It is the one decorative thing on the page and it is at least about
+   the subject -- an approximate-nearest-neighbour graph is what the storage
+   layer is. Cheap, capped, and skipped entirely under reduced-motion. */
+(function () {
+  var c = document.getElementById("bg");
+  if (!c || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var x = c.getContext("2d"), pts = [], raf = null;
+
+  function size() {
+    var d = Math.min(devicePixelRatio || 1, 2);
+    c.width = c.clientWidth * d; c.height = c.clientHeight * d;
+    x.setTransform(d, 0, 0, d, 0, 0);
+  }
+  function seed() {
+    var w = c.clientWidth, h = c.clientHeight;
+    var count = Math.min(64, Math.round(w * h / 14000));
+    pts = [];
+    for (var i = 0; i < count; i++) {
+      pts.push({x: Math.random() * w, y: Math.random() * h,
+                vx: (Math.random() - .5) * .16, vy: (Math.random() - .5) * .16});
+    }
+  }
+  function frame() {
+    var w = c.clientWidth, h = c.clientHeight;
+    x.clearRect(0, 0, w, h);
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+    }
+    x.lineWidth = 1;
+    for (i = 0; i < pts.length; i++) {
+      for (var j = i + 1; j < pts.length; j++) {
+        var dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < 15000) {
+          x.strokeStyle = "rgba(167,139,250," + (.16 * (1 - d2 / 15000)).toFixed(3) + ")";
+          x.beginPath(); x.moveTo(pts[i].x, pts[i].y);
+          x.lineTo(pts[j].x, pts[j].y); x.stroke();
+        }
+      }
+      x.fillStyle = "rgba(167,139,250,.32)";
+      x.beginPath(); x.arc(pts[i].x, pts[i].y, 1.4, 0, 6.2832); x.fill();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  function boot() { size(); seed(); if (!raf) frame(); }
+  addEventListener("resize", function () { size(); seed(); });
+  boot();
+})();
+</script>
+</body>
+</html>
