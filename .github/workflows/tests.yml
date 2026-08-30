@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # All three engines are read-only dependencies, cloned rather than
+      # vendored so CI runs against their current main. That is deliberate:
+      # this repo's whole claim is about the COMPOSITION, and a composition
+      # tested against frozen copies of its parts is not testing the thing
+      # that breaks. If an upstream change breaks the platform, this job is
+      # where it should surface.
+      - name: Clone engines
+        run: |
+          git clone --depth 1 https://github.com/abho7/raft-kv-store.git                  ./raft-engine
+          git clone --depth 1 https://github.com/abho7/vectordb-hnsw.git                  ./hnsw-engine
+          git clone --depth 1 https://github.com/abho7/distributed-training-framework.git ./training-engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pytest
+
+      # The full suite, including the slow cross-layer chaos and real-TCP
+      # tests. Those are the ones that found the bug this repo exists to
+      # document, so excluding them to save 90 seconds would leave the
+      # interesting half unverified.
+      - name: Run tests
+        run: pytest -v

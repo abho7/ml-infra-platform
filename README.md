@@ -1,5 +1,8 @@
 # ml-infra-platform
 
+[![tests](https://github.com/abho7/ml-infra-platform/actions/workflows/tests.yml/badge.svg)](https://github.com/abho7/ml-infra-platform/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A distributed ML platform built by composing three systems that were already
 built and tested separately: a Raft consensus engine, an HNSW vector index, and
 a distributed training framework. Models train on the training engine; their
