@@ -1,0 +1,12 @@
+# site/ is emitted by build_site.py from the JSON in results/. It is committed
+# because GitHub Pages serves it, but it is not source.
+#
+# Without this, GitHub counted its 261 KB of generated HTML against 268 KB of
+# hand-written Python and labelled the whole repo "HTML" -- a distributed
+# systems project presenting itself as a web page. linguist-generated keeps it
+# out of the language stats and collapses it in diffs, where a regenerated
+# report is noise rather than a change worth reading.
+site/** linguist-generated=true
+
+# dashboard/ is hand-written UI, not generated, so it is deliberately not
+# listed here.
