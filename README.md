@@ -4,11 +4,14 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A distributed ML platform built by composing three systems that were already
-built and tested separately: a Raft consensus engine, an HNSW vector index, and
-a distributed training framework. Models train on the training engine; their
-embeddings are replicated through Raft into an HNSW-backed vector store that
-survives node failure; a control plane orchestrates both and a dashboard shows
-it happening.
+built and tested separately: a Raft consensus engine
+([raft-kv-store](https://github.com/abho7/raft-kv-store)), an HNSW vector index
+([vectordb-hnsw](https://github.com/abho7/vectordb-hnsw)), and a distributed
+training framework
+([distributed-training-framework](https://github.com/abho7/distributed-training-framework)).
+Models train on the training engine; their embeddings are replicated through
+Raft into an HNSW-backed vector store that survives node failure; a control
+plane orchestrates both and a dashboard shows it happening.
 
 **[Report and benchmarks](https://abho7.github.io/ml-infra-platform/)** ·
 **[Dashboard replay](https://abho7.github.io/ml-infra-platform/dashboard.html)**
