@@ -585,6 +585,24 @@ def build_report(r: dict) -> str:
 <meta name="description" content="A distributed ML platform built by composing a
 Raft engine, an HNSW vector index, and a distributed training framework, and the
 evidence that the composition is correct.">
+<link rel="canonical" href="https://abho7.github.io/ml-infra-platform/">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- Link preview. og.png sits beside this file in site/ and is rendered from
+     tools/og-card.html in this report's own palette. -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://abho7.github.io/ml-infra-platform/">
+<meta property="og:title" content="Composing Three Systems">
+<meta property="og:description" content="A Raft engine, an HNSW index and a training framework composed into one platform, none of them modified. The first cross-layer bug: both engines behaved correctly and every replica in the cluster crashed.">
+<meta property="og:image" content="https://abho7.github.io/ml-infra-platform/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ml-infra-platform - first cross-layer bug: both engines correct, every replica crashed">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Composing Three Systems">
+<meta name="twitter:description" content="A Raft engine, an HNSW index and a training framework composed into one platform, none of them modified. The first cross-layer bug: both engines behaved correctly and every replica in the cluster crashed.">
+<meta name="twitter:image" content="https://abho7.github.io/ml-infra-platform/og.png">
 <style>{CSS}</style>
 </head>
 <body>

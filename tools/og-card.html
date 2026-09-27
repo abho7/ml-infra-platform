@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Source for og.png, this report's link-preview card.
+
+     Render at twice the target size and downsample to 1200x630 (Lanczos):
+
+       chrome --headless=new --window-size=1200,630
+              --force-device-scale-factor=2 --screenshot=og2x.png
+              tools/og-card.html
+
+     The palette and type are this report page's own, so the preview looks
+     like the page it opens rather than like a generic banner. Every figure
+     on the card is stated and sourced on that page. -->
+<html lang="en"><head><meta charset="utf-8">
+
+<style>
+  html,body{margin:0;padding:0;width:1200px;height:630px;overflow:hidden}
+  body{background:#0b0c0e; color:#f2f4f7;
+       display:flex; flex-direction:column; justify-content:center;
+       padding:0 84px; box-sizing:border-box; position:relative}
+  .grid{position:absolute; inset:0; opacity:.5;
+    background-image:
+      repeating-linear-gradient(to right,  #22262c 0 1px, transparent 1px 76px),
+      repeating-linear-gradient(to bottom, #22262c 0 1px, transparent 1px 76px);}
+  .glow{position:absolute; right:-180px; bottom:-240px; width:760px; height:760px;
+    background:radial-gradient(circle, #a78bfa22 0%, transparent 62%)}
+  .in{position:relative}
+  .eyebrow{font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; font-size:19px; letter-spacing:.18em;
+    text-transform:uppercase; color:#b3bcc6; margin:0 0 30px}
+  .head{font-family:"Space Grotesk", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; font-size:42px; line-height:1.22;
+    font-weight:500; letter-spacing:-.01em; margin:0 0 30px; max-width:22ch}
+  .fig{font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; font-size:28px; color:#a78bfa; margin:0 0 34px;
+    letter-spacing:-.01em}
+  .rule{height:1px; background:#22262c; width:640px; margin:0 0 26px}
+  .foot{font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; font-size:19px; color:#b3bcc6; margin:0}
+</style></head>
+<body>
+  <div class="grid"></div><div class="glow"></div>
+  <div class="in">
+    <p class="eyebrow">ml-infra-platform &middot; three engines composed, none modified</p>
+    <p class="head">A component proof is a statement about a component under its own assumptions.</p>
+    <p class="fig">First cross-layer bug: both engines correct, every replica crashed</p>
+    <div class="rule"></div>
+    <p class="foot">abho7.github.io/ml-infra-platform</p>
+  </div>
+</body></html>
