@@ -2,7 +2,7 @@
 The cross-layer correctness checker.
 
 Every invariant here lives at a SEAM. Raft's own safety properties are proven
-by its 23 tests, HNSW's recall by its 28, gradient exactness by the training
+by its 24 tests, HNSW's recall by its 54, gradient exactness by the training
 engine's 68. None of those can be violated by anything this platform does,
 because none of those engines is modified. What can be violated is the
 composition -- and that is a genuinely different claim, because the failure

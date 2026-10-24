@@ -651,8 +651,8 @@ evidence that the composition is correct.">
     <h2>What is actually being proven</h2>
     <div class="prose stack">
       <p class="lede">
-        The three engines come with their own suites, and they pass: 23 tests for
-        Raft, 28 for HNSW, 68 for the training framework. None of them says
+        The three engines come with their own suites, and they pass: 24 tests for
+        Raft, 54 for HNSW, 68 for the training framework. None of them says
         anything about what happens when a training worker dies at the same
         moment the storage cluster splits in half.
       </p>

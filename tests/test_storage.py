@@ -2,7 +2,7 @@
 Storage layer: a Raft-replicated HNSW index.
 
 These tests are about the SEAM, not about either engine. Raft's own safety
-properties are proven by its 23 tests and HNSW's recall by its 28; what is
+properties are proven by its 24 tests and HNSW's recall by its 54; what is
 unproven until here is that wiring them together preserves both.
 
 Two hazards get pinned rather than merely avoided, because a test that only

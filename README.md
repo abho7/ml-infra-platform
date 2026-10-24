@@ -23,7 +23,7 @@ dependencies and driven from outside.
 
 ## The point
 
-Each engine passes its own suite: 23 tests for Raft, 28 for HNSW, 68 for the
+Each engine passes its own suite: 24 tests for Raft, 54 for HNSW, 68 for the
 training framework. None of those suites says anything about what happens when
 a training worker dies at the same instant the storage cluster splits in half.
 
